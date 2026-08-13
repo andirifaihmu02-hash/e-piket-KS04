@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Laporan Guru Piket</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <style>
+        /* Sembunyikan elemen scrollbar agar lebih rapi namun tetap bisa di-scroll */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* CSS KHUSUS UNTUK CETAK PDF */
+        @media print {
+            /* Sembunyikan semua elemen default */
+            body * { visibility: hidden; }
+            /* Tampilkan hanya area cetak */
+            #print-section, #print-section * { visibility: visible; }
+            #print-section { 
+                position: absolute; 
+                left: 0; 
+                top: 0; 
+                width: 100%; 
+                background: white !important;
+                margin: 0; 
+                padding: 10px;
+            }
+            /* Hilangkan warna background bawaan browser jika ada */
+            body { background-color: white !important; }
+            /* PERBAIKAN: Ubah parent agar halaman bisa dicetak penuh (tidak blank) */
+            #piket-app {
+                position: static !important;
+                overflow: visible !important;
+                height: auto !important;
+            }
+            @page { size: A4 portrait; margin: 1cm; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- WRAPPER UTAMA: Menutupi seluruh template Blogger -->
+    <div id="piket-app" class="fixed inset-0 w-full h-full bg-gray-50 z-[999999] overflow-y-auto font-sans" x-data="piketApp()">
+        
+        <!-- THUMBNAIL BLOGGER (Tersembunyi) -->
+        <div style="display:none;">
+            <img src="https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&q=80&w=800" alt="Laporan Piket Thumbnail">
+        </div>
+
+        <!-- NOTIFIKASI TOAST -->
+        <div x-show="toast.show" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-y-[-20px]"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[1000000] px-6 py-3 rounded-lg shadow-lg text-white font-medium"
+             :class="toast.type === 'error' ? 'bg-red-600' : (toast.type === 'success' ? 'bg-green-600' : 'bg-blue-600')"
+             style="display: none;">
+            <span x-text="toast.message"></span>
+        </div>
+
+        <!-- OVERLAY LOADING -->
+        <div x-show="isLoading" class="fixed inset-0 bg-black bg-opacity-50 z-[1000000] flex flex-col items-center justify-center text-white" style="display: none;">
+            <i class="fas fa-spinner fa-spin text-5xl mb-4"></i>
+            <p class="text-lg font-semibold animate-pulse">Memproses Data...</p>
+        </div>
+
+        <!-- ================= HALAMAN LOGIN ================= -->
+        <template x-if="page === 'login'">
+            <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-500 to-indigo-600">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+                    <div class="text-center mb-8">
+                        <div class="w-24 h-24 mx-auto mb-4">
+                            <img src="https://iili.io/CU2uox4.png" alt="Logo Sekolah" class="w-full h-full object-contain">
+                        </div>
+                        <h1 class="text-2xl font-bold text-gray-800">Laporan Guru Piket</h1>
+                        <p class="text-gray-500 mt-2 text-sm">ayo bersemangat</p>
+                        
+                        <template x-if="IS_PREVIEW">
+                            <div class="mt-4 p-3 bg-yellow-100 text-yellow-800 text-xs rounded border border-yellow-300 text-left">
+                                <strong>MODE PREVIEW AKTIF!</strong><br>
+                                Admin: admin / edudigital<br>
+                                Guru: peserta / edudigital
+                            </div>
+                        </template>
+                    </div>
+
+                    <form @submit.prevent="doLogin" class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Username / NIP</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fas fa-user"></i></span>
+                                <input type="text" x-model="loginData.username" required class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" placeholder="Masukkan Username">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fas fa-lock"></i></span>
+                                <input type="password" x-model="loginData.password" required class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" placeholder="Masukkan Password">
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md">
+                            Masuk <i class="fas fa-sign-in-alt ml-2"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </template>
+
+        <!-- MAIN LAYOUT (Untuk Guru & Admin) -->
+        <template x-if="page !== 'login'">
+            <div class="min-h-screen flex flex-col">
+                <!-- NAVBAR -->
+                <nav class="bg-blue-600 text-white shadow-lg sticky top-0 z-[990]">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center">
+                                <i class="fas fa-clipboard-list text-2xl mr-3"></i>
+                                <span class="font-bold text-lg tracking-wide hidden sm:block">E-Piket Sekolah</span>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <div class="text-right hidden sm:block">
+                                    <div class="text-sm font-bold" x-text="user?.nama"></div>
+                                    <div class="text-xs text-blue-200 capitalize" x-text="user?.role"></div>
+                                </div>
+                                <button @click="doLogout" class="bg-blue-700 hover:bg-blue-800 p-2 rounded-lg transition" title="Logout">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+
+                <!-- KONTEN GURU PIKET -->
+                <template x-if="user && user.role === 'guru'">
+                    <div class="flex-grow max-w-4xl mx-auto w-full p-4 space-y-6">
+                        
+                        <!-- Header & Tanggal -->
+                        <div class="bg-white rounded-xl shadow p-6 border-t-4 border-blue-500">
+                            <h2 class="text-xl font-bold text-gray-800">Formulir Laporan Piket Harian</h2>
+                            <p class="text-gray-500 text-sm mt-1">Isi laporan dengan lengkap. Absensi kelas wajib diisi untuk rekapitulasi.</p>
+                        </div>
+
+                        <!-- Tabs Guru -->
+                        <div class="flex space-x-2 bg-white rounded-lg p-1 shadow flex-wrap gap-y-2">
+                            <button @click="guruTab = 'form'" :class="guruTab === 'form' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-pen-to-square mr-2"></i> Isi Laporan
+                            </button>
+                            <button @click="loadGuruHistory()" :class="guruTab === 'riwayat' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-history mr-2"></i> Riwayat Saya
+                            </button>
+                            <button @click="loadSiswaData()" :class="guruTab === 'siswa' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-users-line mr-2"></i> Format Absen
+                            </button>
+                        </div>
+
+                        <!-- Form Area -->
+                        <div x-show="guruTab === 'form'" class="bg-white rounded-xl shadow overflow-hidden">
+                            <form @submit.prevent="submitLaporan" class="p-6 space-y-6">
+                                
+                                <!-- Waktu & Guru Absen -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Jam Kedatangan Piket</label>
+                                        <input type="time" x-model="form.jamHadir" required class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Guru Yang Tidak Hadir (Kosongkan jika nihil)</label>
+                                        <input type="text" x-model="form.guruTidakHadir" placeholder="Cth: Bpk. Budi (Sakit), Ibu Ani (Izin)" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500">
+                                    </div>
+                                </div>
+
+                                <!-- Rekap Absensi Kelas -->
+                                <div>
+                                    <div class="flex items-center justify-between bg-gray-50 p-3 rounded-t-lg border border-gray-200 border-b-0">
+                                        <label class="font-medium text-gray-800"><i class="fas fa-users mr-2 text-blue-600"></i>Rekapitulasi Absensi Siswa</label>
+                                        <div class="text-xs text-gray-500 font-medium">S = Sakit, I = Izin, A = Alpa</div>
+                                    </div>
+                                    <div class="border border-gray-200 rounded-b-lg p-4 bg-white overflow-x-auto">
+                                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                            <template x-for="kelas in classes" :key="kelas">
+                                                <div class="border rounded p-2 bg-gray-50">
+                                                    <div class="font-bold text-center text-blue-800 mb-2 border-b pb-1" x-text="'Kelas ' + kelas"></div>
+                                                    <div class="flex justify-between space-x-1 text-sm">
+                                                        <div class="flex flex-col items-center">
+                                                            <span class="text-xs font-semibold text-gray-500 mb-1">S</span>
+                                                            <input type="number" min="0" x-model="form.absensi[kelas].s" class="w-10 p-1 text-center border rounded">
+                                                        </div>
+                                                        <div class="flex flex-col items-center">
+                                                            <span class="text-xs font-semibold text-gray-500 mb-1">I</span>
+                                                            <input type="number" min="0" x-model="form.absensi[kelas].i" class="w-10 p-1 text-center border rounded">
+                                                        </div>
+                                                        <div class="flex flex-col items-center">
+                                                            <span class="text-xs font-semibold text-gray-500 mb-1">A</span>
+                                                            <input type="number" min="0" x-model="form.absensi[kelas].a" class="w-10 p-1 text-center border rounded">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Kejadian Penting -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Kejadian Penting / Catatan Selama Piket</label>
+                                    <textarea x-model="form.kejadianPenting" rows="3" placeholder="Tuliskan kejadian penting atau pelanggaran tata tertib hari ini..." class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500"></textarea>
+                                </div>
+
+                                <!-- Upload Foto -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload Foto Dokumentasi Piket</label>
+                                    <div class="flex items-center justify-center w-full">
+                                        <label for="dropzone-file" class="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 relative overflow-hidden">
+                                            <div class="flex flex-col items-center justify-center pt-5 pb-6" x-show="!form.fotoBase64">
+                                                <i class="fas fa-camera text-4xl text-gray-400 mb-3"></i>
+                                                <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Klik untuk ambil foto</span> atau pilih file</p>
+                                                <p class="text-xs text-gray-500">Kamera HP didukung (Otomatis Kompresi)</p>
+                                            </div>
+                                            <template x-if="form.fotoBase64">
+                                                <img :src="form.fotoBase64" class="absolute inset-0 w-full h-full object-contain bg-black bg-opacity-10" />
+                                            </template>
+                                            <input id="dropzone-file" type="file" accept="image/*" capture="environment" class="hidden" @change="handleImageUpload" />
+                                        </label>
+                                    </div>
+                                    <p class="text-xs text-red-500 mt-1" x-show="form.fotoBase64">Foto telah dipilih. Klik area foto untuk mengubah.</p>
+                                </div>
+
+                                <div class="pt-4 border-t">
+                                    <button type="submit" class="w-full md:w-auto px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow transition">
+                                        <i class="fas fa-paper-plane mr-2"></i> Kirim Laporan Piket
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Riwayat Guru -->
+                        <div x-show="guruTab === 'riwayat'" class="bg-white rounded-xl shadow p-6 overflow-hidden" style="display: none;">
+                            <h3 class="text-lg font-bold text-gray-800 mb-4">Riwayat Laporan Piket Saya</h3>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kehadiran</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Absen Siswa</th>
+                                            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Foto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                                        <template x-for="item in riwayatGuru" :key="item.id">
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-4 py-3 whitespace-nowrap text-gray-900 font-medium" x-text="item.tanggal"></td>
+                                                <td class="px-4 py-3 whitespace-nowrap text-gray-600">
+                                                    Piket: <span x-text="item.jamHadir"></span><br>
+                                                    Tdk Hadir: <span x-text="item.guruTidakHadir || '-'"></span>
+                                                </td>
+                                                <td class="px-4 py-3 text-gray-600 text-xs">
+                                                    <button @click="viewRekap(item.rekapAbsen)" class="text-blue-600 hover:underline"><i class="fas fa-eye"></i> Lihat Rekap</button>
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap text-center">
+                                                    <button @click="printReport(item, 'form')" class="inline-block px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200 mr-1" title="Cetak Form"><i class="fas fa-print"></i> Form</button>
+                                                    <button @click="printReport(item, 'table')" class="inline-block px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-200 mr-1" title="Cetak Tabel"><i class="fas fa-table"></i> Tabel</button>
+                                                    <template x-if="item.fotoUrl && item.fotoUrl !== '-'">
+                                                        <a :href="item.fotoUrl" target="_blank" class="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium hover:bg-blue-200">Lihat Foto</a>
+                                                    </template>
+                                                    <template x-if="!item.fotoUrl || item.fotoUrl === '-'">
+                                                        <span class="text-gray-400 text-xs">-</span>
+                                                    </template>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr x-show="riwayatGuru.length === 0">
+                                            <td colspan="4" class="px-4 py-8 text-center text-gray-500">Belum ada riwayat laporan.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- KONTEN ADMIN -->
+                <template x-if="user && user.role === 'admin'">
+                    <div class="flex-grow max-w-7xl mx-auto w-full p-4 space-y-6">
+                        
+                        <!-- Dashboard Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div class="bg-white p-5 rounded-xl shadow border-l-4 border-blue-500 flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 font-medium">Total Laporan Masuk</p>
+                                    <h3 class="text-2xl font-bold text-gray-800" x-text="laporan.length"></h3>
+                                </div>
+                                <div class="bg-blue-100 p-3 rounded-full text-blue-600"><i class="fas fa-file-lines text-xl"></i></div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow border-l-4 border-green-500 flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-gray-500 font-medium">Total Akun Guru</p>
+                                    <h3 class="text-2xl font-bold text-gray-800" x-text="usersData.length"></h3>
+                                </div>
+                                <div class="bg-green-100 p-3 rounded-full text-green-600"><i class="fas fa-users text-xl"></i></div>
+                            </div>
+                            <button @click="loadDataAdmin(true)" class="bg-white p-5 rounded-xl shadow flex items-center justify-center gap-2 text-blue-600 hover:bg-gray-50 transition cursor-pointer border border-transparent hover:border-blue-200">
+                                <i class="fas fa-sync-alt"></i> <span class="font-bold">Refresh Data</span>
+                            </button>
+                        </div>
+
+                        <!-- Tabs Admin -->
+                        <div class="flex space-x-2 bg-white rounded-lg p-1 shadow max-w-xl flex-wrap gap-y-2">
+                            <button @click="adminTab = 'laporan'" :class="adminTab === 'laporan' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-table mr-2"></i> Data Laporan
+                            </button>
+                            <button @click="adminTab = 'users'" :class="adminTab === 'users' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-users-cog mr-2"></i> Kelola Guru
+                            </button>
+                            <button @click="loadSiswaData()" :class="adminTab === 'siswa' ? 'bg-blue-100 text-blue-700' : 'text-gray-500 hover:bg-gray-100'" class="flex-1 py-2 px-4 rounded-md font-medium text-sm transition whitespace-nowrap">
+                                <i class="fas fa-file-excel mr-2"></i> Format Absen
+                            </button>
+                        </div>
+
+                        <!-- TAB LAPORAN -->
+                        <div x-show="adminTab === 'laporan'" class="bg-white rounded-xl shadow overflow-hidden">
+                            <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+                                <h3 class="font-bold text-gray-800">Semua Data Laporan Piket</h3>
+                            </div>
+                            <div class="overflow-x-auto p-4">
+                                <table class="min-w-full divide-y divide-gray-200 border">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Tgl / Waktu</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Nama Piket</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Keterangan</th>
+                                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Absen Siswa</th>
+                                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Foto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                                        <template x-for="lap in laporan" :key="lap.id">
+                                            <tr class="hover:bg-blue-50">
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <div class="font-medium text-gray-900" x-text="lap.tanggal"></div>
+                                                    <div class="text-xs text-gray-500">Hadir: <span x-text="lap.jamHadir"></span></div>
+                                                </td>
+                                                <td class="px-4 py-3 font-medium text-blue-700" x-text="lap.namaGuru"></td>
+                                                <td class="px-4 py-3 max-w-xs">
+                                                    <div class="text-xs truncate"><span class="font-semibold">Tdk Hadir:</span> <span x-text="lap.guruTidakHadir || '-'"></span></div>
+                                                    <div class="text-xs truncate"><span class="font-semibold">Kejadian:</span> <span x-text="lap.kejadianPenting || '-'"></span></div>
+                                                </td>
+                                                <td class="px-4 py-3 text-center">
+                                                    <button @click="printReport(lap, 'form')" class="inline-flex items-center justify-center w-8 h-8 bg-green-100 text-green-600 rounded hover:bg-green-200 mr-1" title="Cetak Form">
+                                                        <i class="fas fa-print"></i>
+                                                    </button>
+                                                    <button @click="printReport(lap, 'table')" class="inline-flex items-center justify-center w-8 h-8 bg-yellow-100 text-yellow-600 rounded hover:bg-yellow-200 mr-1" title="Cetak Tabel">
+                                                        <i class="fas fa-table"></i>
+                                                    </button>
+                                                     <template x-if="lap.fotoUrl && lap.fotoUrl !== '-'">
+                                                        <a :href="lap.fotoUrl" target="_blank" class="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Lihat Foto">
+                                                            <i class="fas fa-image"></i>
+                                                        </a>
+                                                    </template>
+                                                    <template x-if="!lap.fotoUrl || lap.fotoUrl === '-'">
+                                                        <span class="text-gray-300"><i class="fas fa-image"></i></span>
+                                                    </template>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr x-show="laporan.length === 0">
+                                            <td colspan="5" class="px-4 py-8 text-center text-gray-500">Belum ada data laporan.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB MANAJEMEN USER -->
+                        <div x-show="adminTab === 'users'" class="bg-white rounded-xl shadow overflow-hidden" style="display: none;">
+                            <div class="p-4 bg-gray-50 border-b flex justify-between items-center flex-wrap gap-2">
+                                <h3 class="font-bold text-gray-800">Kelola Akun Guru Piket</h3>
+                                <button @click="modalUser = true" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700">
+                                    <i class="fas fa-plus mr-1"></i> Tambah Guru
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto p-4">
+                                <table class="min-w-full divide-y divide-gray-200 border">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Username / NIP</th>
+                                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase">Nama Lengkap</th>
+                                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Role</th>
+                                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-600 uppercase">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                                        <template x-for="u in usersData" :key="u.username">
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-4 py-3 font-medium text-gray-900" x-text="u.username"></td>
+                                                <td class="px-4 py-3 text-gray-700" x-text="u.nama"></td>
+                                                <td class="px-4 py-3 text-center">
+                                                    <span class="px-2 py-1 rounded text-xs font-bold capitalize" :class="u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'" x-text="u.role"></span>
+                                                </td>
+                                                <td class="px-4 py-3 text-center">
+                                                    <button x-show="u.username !== 'admin'" @click="hapusUser(u.username)" class="text-red-500 hover:text-red-700 p-1" title="Hapus Akun">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB DATA SISWA & EXPORT EXCEL (SHARED FOR ADMIN AND GURU) -->
+                        <div x-show="(user?.role === 'admin' && adminTab === 'siswa') || (user?.role === 'guru' && guruTab === 'siswa')" class="bg-white rounded-xl shadow overflow-hidden" style="display: none;">
+                            <div class="p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div>
+                                    <h3 class="font-bold text-gray-800 text-lg"><i class="fas fa-users-line text-blue-600 mr-2"></i> Manajemen Siswa & Cetak Excel</h3>
+                                    <p class="text-sm text-gray-500 mt-1">Kelola daftar siswa per kelas dan unduh format laporan absensi bulanan.</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                                    <select x-model="selectedKelasSiswa" @change="loadSiswaData()" class="border-gray-300 rounded-lg p-2 text-sm focus:ring-blue-500 outline-none border shadow-sm flex-1 md:flex-none">
+                                        <template x-for="kls in classes" :key="kls">
+                                            <option :value="kls" x-text="'Kelas ' + kls"></option>
+                                        </template>
+                                    </select>
+                                    <select x-model="selectedBulanSiswa" class="border-gray-300 rounded-lg p-2 text-sm focus:ring-blue-500 outline-none border shadow-sm flex-1 md:flex-none">
+                                        <template x-for="bln in listBulan" :key="bln">
+                                            <option :value="bln" x-text="bln"></option>
+                                        </template>
+                                    </select>
+                                    <button @click="downloadExcelSiswa()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center justify-center flex-1 md:flex-none w-full md:w-auto">
+                                        <i class="fas fa-file-excel mr-2"></i> Unduh Excel
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 border-b bg-gray-50 flex justify-between items-center flex-wrap gap-2">
+                                <h4 class="font-bold text-gray-700">Daftar Siswa Kelas <span x-text="selectedKelasSiswa" class="text-blue-600"></span></h4>
+                                <div class="space-x-2">
+                                    <button @click="tambahSiswa()" class="bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm font-bold transition">
+                                        <i class="fas fa-plus mr-1"></i> Tambah Baris
+                                    </button>
+                                    <button @click="simpanDataSiswa()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow transition">
+                                        <i class="fas fa-save mr-1"></i> Simpan Siswa
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="overflow-x-auto p-4">
+                                <table class="min-w-full border-collapse border border-gray-300 text-sm">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="border border-gray-300 px-3 py-2 w-12 text-center font-bold text-gray-600">No</th>
+                                            <th class="border border-gray-300 px-3 py-2 w-32 text-left font-bold text-gray-600">NIS</th>
+                                            <th class="border border-gray-300 px-3 py-2 w-24 text-center font-bold text-gray-600">L/P</th>
+                                            <th class="border border-gray-300 px-3 py-2 text-left font-bold text-gray-600">Nama Siswa</th>
+                                            <th class="border border-gray-300 px-3 py-2 w-16 text-center font-bold text-gray-600">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="(siswa, index) in listSiswa" :key="index">
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="border border-gray-300 px-3 py-2 text-center text-gray-500 font-medium" x-text="index + 1"></td>
+                                                <td class="border border-gray-300 px-3 py-1">
+                                                    <input type="text" x-model="siswa.nis" class="w-full p-1 border-none bg-transparent outline-none focus:ring-1 focus:ring-blue-500 rounded" placeholder="Input NIS">
+                                                </td>
+                                                <td class="border border-gray-300 px-3 py-1 text-center">
+                                                    <select x-model="siswa.lp" class="p-1 border-none bg-transparent outline-none cursor-pointer text-center w-full">
+                                                        <option value="L">L</option>
+                                                        <option value="P">P</option>
+                                                    </select>
+                                                </td>
+                                                <td class="border border-gray-300 px-3 py-1">
+                                                    <input type="text" x-model="siswa.nama" class="w-full p-1 border-none bg-transparent outline-none focus:ring-1 focus:ring-blue-500 rounded" placeholder="Nama Lengkap Siswa">
+                                                </td>
+                                                <td class="border border-gray-300 px-3 py-2 text-center">
+                                                    <button @click="listSiswa.splice(index, 1)" class="text-red-500 hover:text-red-700 bg-red-50 rounded-full w-8 h-8 flex items-center justify-center mx-auto" title="Hapus Siswa">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr x-show="listSiswa.length === 0">
+                                            <td colspan="5" class="border border-gray-300 px-4 py-8 text-center text-gray-500 bg-gray-50">
+                                                <i class="fas fa-user-graduate text-3xl mb-2 text-gray-300 block"></i>
+                                                Belum ada data siswa. Silakan klik <b>"Tambah Baris"</b>.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <!-- MODAL REKAP ABSENSI -->
+        <div x-show="modalRekap" class="fixed inset-0 bg-black bg-opacity-60 z-[1000000] flex items-center justify-center p-4" style="display: none;">
+            <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col" @click.outside="modalRekap = false">
+                <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="font-bold text-lg text-gray-800"><i class="fas fa-users mr-2 text-blue-600"></i> Detail Rekap Absensi</h3>
+                    <button @click="modalRekap = false" class="text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <div class="p-4 overflow-y-auto">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <template x-for="(data, kls) in activeRekap" :key="kls">
+                            <div class="border rounded-lg p-3 bg-white shadow-sm text-center">
+                                <div class="font-bold text-lg text-blue-800 border-b pb-1 mb-2" x-text="kls"></div>
+                                <div class="grid grid-cols-3 gap-1 text-sm">
+                                    <div><div class="text-xs text-gray-400 font-bold">S</div><div class="font-semibold text-orange-500" x-text="data.s || 0"></div></div>
+                                    <div><div class="text-xs text-gray-400 font-bold">I</div><div class="font-semibold text-blue-500" x-text="data.i || 0"></div></div>
+                                    <div><div class="text-xs text-gray-400 font-bold">A</div><div class="font-semibold text-red-500" x-text="data.a || 0"></div></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="p-4 border-t text-right bg-gray-50 rounded-b-xl">
+                    <button @click="modalRekap = false" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">Tutup</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL TAMBAH USER -->
+        <div x-show="modalUser" class="fixed inset-0 bg-black bg-opacity-60 z-[1000000] flex items-center justify-center p-4" style="display: none;">
+            <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full" @click.outside="modalUser = false">
+                <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="font-bold text-lg text-gray-800">Tambah Akun Guru</h3>
+                    <button @click="modalUser = false" class="text-gray-400 hover:text-red-500"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <form @submit.prevent="submitUser" class="p-4 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Username / NIP</label>
+                        <input type="text" x-model="newUser.username" required class="w-full px-3 py-2 border rounded focus:border-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <input type="text" x-model="newUser.password" required class="w-full px-3 py-2 border rounded focus:border-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                        <input type="text" x-model="newUser.nama" required class="w-full px-3 py-2 border rounded focus:border-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                        <select x-model="newUser.role" class="w-full px-3 py-2 border rounded focus:border-blue-500 outline-none">
+                            <option value="guru">Guru Piket</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="pt-4 border-t text-right">
+                        <button type="button" @click="modalUser = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded mr-2">Batal</button>
+                        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold">Simpan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ================= TEMPLATE CETAK LAPORAN (PDF) ================= -->
+        <!-- Area ini normalnya disembunyikan, dan hanya dipanggil saat fungsi print dipicu -->
+        <div id="print-section" class="hidden w-full bg-white text-black font-serif" :class="{'hidden': !isPrinting, 'block': isPrinting}">
+            
+            <!-- CETAK MODE FORM / SURAT -->
+            <template x-if="activePrintData && printMode === 'form'">
+                <div>
+                    <!-- Kop Surat -->
+                    <div class="flex items-center border-b-4 border-black pb-4 mb-6">
+                        <img src="https://iili.io/CU2uox4.png" alt="CU2uox4.png" class="w-24 h-24 object-contain" style="vertical-align: middle;">
+                        <div class="flex-1 text-center px-4">
+                            <h1 class="text-xl md:text-2xl font-bold uppercase">PEMERINTAH PROVINSI DKI JAKARTA</h1>
+                            <h2 class="text-lg md:text-xl font-bold uppercase">DINAS PENDIDIKAN</h2>
+                            <h2 class="text-xl md:text-2xl font-bold uppercase">SDN KEDOYA SELATAN 04 PAGI</h2>
+                            <p class="text-xs md:text-sm">Alamat: Jl. Kedoya Raya, Kec. Kebon Jeruk, Kota Jakarta Barat</p>
+                            <p class="text-xs md:text-sm">Telp: (021) 1234567 | Email: sdnkedoyaselatan04pagi@contoh.id</p>
+                        </div>
+                        <div class="w-24"></div> <!-- Spacer penyeimbang layout -->
+                    </div>
+
+                    <!-- Judul Laporan -->
+                    <div class="text-center mb-6">
+                        <h3 class="text-lg font-bold underline">LAPORAN HARIAN GURU PIKET</h3>
+                    </div>
+
+                    <!-- Informasi Umum -->
+                    <table class="w-full mb-6 text-sm">
+                        <tr>
+                            <td class="w-[30%] font-bold py-1">Hari / Tanggal</td>
+                            <td class="w-[2%]">:</td>
+                            <td x-text="activePrintData.tanggal"></td>
+                        </tr>
+                        <tr>
+                            <td class="font-bold py-1">Nama Guru Piket</td>
+                            <td>:</td>
+                            <td x-text="activePrintData.namaGuru"></td>
+                        </tr>
+                        <tr>
+                            <td class="font-bold py-1">Jam Kedatangan</td>
+                            <td>:</td>
+                            <td x-text="activePrintData.jamHadir"></td>
+                        </tr>
+                    </table>
+
+                    <!-- Kehadiran Guru -->
+                    <div class="mb-4 text-sm">
+                        <h4 class="font-bold mb-1">A. Keterangan Guru Tidak Hadir:</h4>
+                        <div class="border border-black p-3 min-h-[50px]" x-text="activePrintData.guruTidakHadir || 'Nihil (Hadir Semua)'"></div>
+                    </div>
+
+                    <!-- Kejadian Penting -->
+                    <div class="mb-4 text-sm">
+                        <h4 class="font-bold mb-1">B. Catatan / Kejadian Penting:</h4>
+                        <div class="border border-black p-3 min-h-[80px]" x-text="activePrintData.kejadianPenting || 'Tidak ada kejadian khusus (Aman Terkendali)'"></div>
+                    </div>
+
+                    <!-- Rekap Absensi Siswa -->
+                    <div class="mb-6">
+                        <h4 class="font-bold text-sm mb-1">C. Rekapitulasi Absensi Siswa:</h4>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Tabel dibagi 2 kolom agar muat di kertas A4 portrait -->
+                            <table class="w-full border-collapse border border-black text-center text-xs">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="border border-black py-1">Kelas</th>
+                                        <th class="border border-black py-1">S</th>
+                                        <th class="border border-black py-1">I</th>
+                                        <th class="border border-black py-1">A</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="kls in classes.slice(0, Math.ceil(classes.length / 2))" :key="kls">
+                                        <tr>
+                                            <td class="border border-black py-1 font-bold" x-text="kls"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.s || '-'"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.i || '-'"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.a || '-'"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                            <table class="w-full border-collapse border border-black text-center text-xs">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="border border-black py-1">Kelas</th>
+                                        <th class="border border-black py-1">S</th>
+                                        <th class="border border-black py-1">I</th>
+                                        <th class="border border-black py-1">A</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="kls in classes.slice(Math.ceil(classes.length / 2))" :key="kls">
+                                        <tr>
+                                            <td class="border border-black py-1 font-bold" x-text="kls"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.s || '-'"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.i || '-'"></td>
+                                            <td class="border border-black py-1" x-text="activePrintData.parsedRekap[kls]?.a || '-'"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tanda Tangan -->
+                    <div class="flex justify-between mt-12 text-sm break-inside-avoid">
+                        <div class="text-center w-1/3">
+                            <p class="mb-20">Mengetahui,<br>Kepala SDN Kedoya Selatan 04 Pagi</p>
+                            <p class="font-bold underline">Andi Rifaih, S.Pd</p>
+                            <p>NIP. 197410072014121001</p>
+                        </div>
+                        <div class="text-center w-1/3">
+                            <p class="mb-20">Jakarta, <span x-text="activePrintData.tanggalCetak"></span><br>Guru Piket</p>
+                            <p class="font-bold underline" x-text="activePrintData.namaGuru"></p>
+                            <p>NIP. ........................................</p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- CETAK MODE TABEL -->
+            <template x-if="activePrintData && printMode === 'table'">
+                <div>
+                    <!-- Kop Surat -->
+                    <div class="flex items-center border-b-4 border-black pb-4 mb-6">
+                        <img src="https://iili.io/CU2uox4.png" alt="CU2uox4.png" class="w-24 h-24 object-contain" style="vertical-align: middle;">
+                        <div class="flex-1 text-center px-4">
+                            <h1 class="text-xl md:text-2xl font-bold uppercase">PEMERINTAH PROVINSI DKI JAKARTA</h1>
+                            <h2 class="text-lg md:text-xl font-bold uppercase">DINAS PENDIDIKAN</h2>
+                            <h2 class="text-xl md:text-2xl font-bold uppercase">SDN KEDOYA SELATAN 04 PAGI</h2>
+                            <p class="text-xs md:text-sm">Alamat: Jl. Kedoya Raya, Kec. Kebon Jeruk, Kota Jakarta Barat</p>
+                            <p class="text-xs md:text-sm">Telp: (021) 1234567 | Email: sdnkedoyaselatan04pagi@contoh.id</p>
+                        </div>
+                        <div class="w-24"></div> <!-- Spacer penyeimbang layout -->
+                    </div>
+
+                    <!-- Judul Laporan -->
+                    <div class="text-center mb-6">
+                        <h3 class="text-lg font-bold underline">LAPORAN HARIAN GURU PIKET</h3>
+                    </div>
+
+                    <!-- Tabel Laporan Utama -->
+                    <table class="w-full border-collapse border border-black text-sm mb-8">
+                        <tbody>
+                            <tr>
+                                <td class="border border-black p-2 font-bold w-[30%] bg-gray-100">Hari / Tanggal</td>
+                                <td class="border border-black p-2" x-text="activePrintData.tanggal"></td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-2 font-bold w-[30%] bg-gray-100">Nama Guru Piket</td>
+                                <td class="border border-black p-2" x-text="activePrintData.namaGuru"></td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-2 font-bold w-[30%] bg-gray-100">Jam Kedatangan</td>
+                                <td class="border border-black p-2" x-text="activePrintData.jamHadir"></td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-2 font-bold w-[30%] bg-gray-100">Keterangan Guru Tidak Hadir</td>
+                                <td class="border border-black p-2" x-text="activePrintData.guruTidakHadir || 'Nihil (Hadir Semua)'"></td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-2 font-bold w-[30%] bg-gray-100">Catatan / Kejadian Penting</td>
+                                <td class="border border-black p-2 min-h-[60px] align-top" x-text="activePrintData.kejadianPenting || 'Tidak ada kejadian khusus (Aman Terkendali)'"></td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-2 font-bold bg-gray-100 text-center" colspan="2">REKAPITULASI ABSENSI SISWA</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-black p-4" colspan="2">
+                                    <div class="grid grid-cols-3 md:grid-cols-4 gap-4">
+                                        <template x-for="kls in classes" :key="kls">
+                                            <div class="border border-black p-1 text-center text-xs">
+                                                <div class="font-bold border-b border-black bg-gray-100" x-text="kls"></div>
+                                                <div class="flex justify-around mt-1">
+                                                    <span>S: <span x-text="activePrintData.parsedRekap[kls]?.s || '-'"></span></span>
+                                                    <span>I: <span x-text="activePrintData.parsedRekap[kls]?.i || '-'"></span></span>
+                                                    <span>A: <span x-text="activePrintData.parsedRekap[kls]?.a || '-'"></span></span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Tanda Tangan -->
+                    <div class="flex justify-between mt-12 text-sm break-inside-avoid">
+                        <div class="text-center w-1/3">
+                            <p class="mb-20">Mengetahui,<br>Kepala SDN Kedoya Selatan 04 Pagi</p>
+                            <p class="font-bold underline">Andi Rifaih, S.Pd</p>
+                            <p>NIP. 197410072014121001</p>
+                        </div>
+                        <div class="text-center w-1/3">
+                            <p class="mb-20">Jakarta, <span x-text="activePrintData.tanggalCetak"></span><br>Guru Piket</p>
+                            <p class="font-bold underline" x-text="activePrintData.namaGuru"></p>
+                            <p>NIP. ........................................</p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+    </div>
+
+    <!-- KONFIGURASI & LOGIKA APLIKASI -->
+    <script>
+        // ==========================================
+        // KONFIGURASI APLIKASI
+        // UBAH IS_PREVIEW KE false JIKA AKAN DI-DEPLOY
+        // ==========================================
+        const IS_PREVIEW = true; // Mode Canvas Dummy
+        const GAS_URL = "URL_DEPLOY_GAS_ANDA_DISINI"; // Ganti dengan URL Web App GAS
+
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('piketApp', () => ({
+                IS_PREVIEW: IS_PREVIEW,
+                page: 'login', // 'login', 'dashboard'
+                user: null, // {username, role, nama}
+                isLoading: false,
+                guruTab: 'form',
+                adminTab: 'laporan',
+                
+                // State UI
+                toast: { show: false, message: '', type: 'success' },
+                modalRekap: false,
+                activeRekap: {},
+                modalUser: false,
+                isPrinting: false,
+                printMode: 'form',
+                activePrintData: null,
+                
+                // Form Login
+                loginData: { username: '', password: '' },
+                
+                // Form Laporan
+                classes: ['1A','1B','2A','2B','3A','3B','4A','4B','5A','5B','6A','6B'],
+                form: {
+                    jamHadir: '', guruTidakHadir: '', kejadianPenting: '', fotoBase64: '', absensi: {}
+                },
+                
+                // Data
+                laporan: [],
+                riwayatGuru: [],
+                usersData: [],
+                newUser: { username: '', password: '', nama: '', role: 'guru' },
+                
+                // Variabel Data Siswa & Excel Bulanan
+                listBulan: ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'],
+                selectedKelasSiswa: '1A',
+                selectedBulanSiswa: new Date().toLocaleDateString('id-ID', { month: 'long' }),
+                tahunSiswa: new Date().getFullYear(),
+                listSiswa: [],
+
+                init() {
+                    this.resetForm();
+                    // Cek session lokal
+                    const savedUser = localStorage.getItem('piket_user');
+                    if (savedUser) {
+                        this.user = JSON.parse(savedUser);
+                        this.page = 'dashboard';
+                        this.initDashboard();
+                    }
+                },
+
+                showToast(msg, type = 'success') {
+                    this.toast = { show: true, message: msg, type: type };
+                    setTimeout(() => this.toast.show = false, 3500);
+                },
+
+                resetForm() {
+                    this.form.jamHadir = new Date().toTimeString().slice(0,5);
+                    this.form.guruTidakHadir = '';
+                    this.form.kejadianPenting = '';
+                    this.form.fotoBase64 = '';
+                    this.classes.forEach(c => {
+                        this.form.absensi[c] = {s: '', i: '', a: ''};
+                    });
+                },
+
+                // --- FUNGSI LOGIN ---
+                async doLogin() {
+                    this.isLoading = true;
+                    if (this.IS_PREVIEW) {
+                        // Logika Preview Data Dummy
+                        setTimeout(() => {
+                            if (this.loginData.username === 'admin' && this.loginData.password === 'edudigital') {
+                                this.user = { username: 'admin', nama: 'Administrator', role: 'admin' };
+                            } else if (this.loginData.username === 'peserta' && this.loginData.password === 'edudigital') {
+                                this.user = { username: 'peserta', nama: 'Guru Dummy', role: 'guru' };
+                            } else {
+                                this.showToast('Username atau password salah!', 'error');
+                                this.isLoading = false;
+                                return;
+                            }
+                            localStorage.setItem('piket_user', JSON.stringify(this.user));
+                            this.page = 'dashboard';
+                            this.initDashboard();
+                            this.showToast(`Selamat datang, ${this.user.nama}`);
+                            this.isLoading = false;
+                        }, 800);
+                        return;
+                    }
+
+                    // Logika Live GAS
+                    try {
+                        const res = await this.fetchGAS({ action: 'login', username: this.loginData.username, password: this.loginData.password });
+                        if (res.status === 'success') {
+                            this.user = res.data;
+                            localStorage.setItem('piket_user', JSON.stringify(this.user));
+                            this.page = 'dashboard';
+                            this.initDashboard();
+                            this.showToast('Login berhasil!');
+                        } else {
+                            this.showToast(res.message || 'Login gagal', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Koneksi ke server gagal', 'error');
+                    }
+                    this.isLoading = false;
+                },
+
+                doLogout() {
+                    this.user = null;
+                    localStorage.removeItem('piket_user');
+                    this.page = 'login';
+                    this.loginData = {username:'', password:''};
+                },
+
+                initDashboard() {
+                    if (this.user.role === 'admin') {
+                        this.loadDataAdmin();
+                    }
+                },
+
+                // --- KOMPRESI & UPLOAD IMAGE ---
+                handleImageUpload(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    if (file.size > 5 * 1024 * 1024) { // Max 5MB sebelum kompresi
+                        this.showToast('Ukuran file terlalu besar! Maks 5MB', 'error');
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            // Kompresi Canvas
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 800;
+                            const MAX_HEIGHT = 800;
+                            let width = img.width;
+                            let height = img.height;
+
+                            if (width > height) {
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            } else {
+                                if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            // Convert to JPEG base64 (70% quality)
+                            this.form.fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        }
+                        img.src = event.target.result;
+                    }
+                    reader.readAsDataURL(file);
+                },
+
+                // --- SUBMIT LAPORAN GURU ---
+                async submitLaporan() {
+                    this.isLoading = true;
+                    const payload = {
+                        action: 'submit_laporan',
+                        username: this.user.username,
+                        namaGuru: this.user.nama,
+                        jamHadir: this.form.jamHadir,
+                        guruTidakHadir: this.form.guruTidakHadir,
+                        kejadianPenting: this.form.kejadianPenting,
+                        absensi: JSON.stringify(this.form.absensi),
+                        fotoBase64: this.form.fotoBase64 // bisa kosong
+                    };
+
+                    if (this.IS_PREVIEW) {
+                        setTimeout(() => {
+                            this.showToast('Berhasil dikirim (Mode Preview)');
+                            this.resetForm();
+                            this.guruTab = 'riwayat';
+                            this.isLoading = false;
+                        }, 1000);
+                        return;
+                    }
+
+                    try {
+                        const res = await this.fetchGAS(payload);
+                        if (res.status === 'success') {
+                            this.showToast('Laporan berhasil dikirim!');
+                            this.resetForm();
+                            this.guruTab = 'riwayat';
+                            this.loadGuruHistory();
+                        } else {
+                            this.showToast('Gagal: ' + res.message, 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Terjadi kesalahan koneksi', 'error');
+                    }
+                    this.isLoading = false;
+                },
+
+                async loadGuruHistory() {
+                    this.guruTab = 'riwayat';
+                    if (this.IS_PREVIEW) return; // Kosong di preview
+                    this.isLoading = true;
+                    try {
+                        const res = await this.fetchGAS({ action: 'get_laporan_guru', username: this.user.username });
+                        if (res.status === 'success') this.riwayatGuru = res.data;
+                    } catch(e) {}
+                    this.isLoading = false;
+                },
+
+                // --- FUNGSI ADMIN ---
+                async loadDataAdmin(showLoad = false) {
+                    if (showLoad) this.isLoading = true;
+                    if (this.IS_PREVIEW) {
+                        // Dummy Data Admin
+                        this.laporan = [{
+                            id: 1, tanggal: '12/08/2026', jamHadir: '06:30', namaGuru: 'Guru Dummy',
+                            guruTidakHadir: 'Nihil', kejadianPenting: 'Aman terkendali',
+                            rekapAbsen: JSON.stringify({"1A":{"s":1,"i":0,"a":0}}), fotoUrl: '-'
+                        }];
+                        this.usersData = [
+                            {username: 'admin', nama: 'Administrator', role: 'admin'},
+                            {username: 'peserta', nama: 'Guru Dummy', role: 'guru'}
+                        ];
+                        if (showLoad) {
+                            setTimeout(() => { this.isLoading = false; this.showToast('Data diperbarui'); }, 500);
+                        }
+                        return;
+                    }
+
+                    try {
+                        const resLap = await this.fetchGAS({ action: 'get_semua_laporan' });
+                        if (resLap.status === 'success') this.laporan = resLap.data;
+
+                        const resUser = await this.fetchGAS({ action: 'get_users' });
+                        if (resUser.status === 'success') this.usersData = resUser.data;
+                        
+                        if(showLoad) this.showToast('Data berhasil diperbarui');
+                    } catch (e) {
+                        if(showLoad) this.showToast('Gagal memuat data', 'error');
+                    }
+                    if (showLoad) this.isLoading = false;
+                },
+
+                async submitUser() {
+                    this.isLoading = true;
+                    if (this.IS_PREVIEW) {
+                        setTimeout(() => {
+                            this.usersData.push({...this.newUser});
+                            this.modalUser = false;
+                            this.newUser = { username: '', password: '', nama: '', role: 'guru' };
+                            this.showToast('Akun ditambah (Preview)');
+                            this.isLoading = false;
+                        }, 500);
+                        return;
+                    }
+
+                    try {
+                        const payload = { action: 'add_user', ...this.newUser };
+                        const res = await this.fetchGAS(payload);
+                        if (res.status === 'success') {
+                            this.showToast('Akun berhasil ditambahkan');
+                            this.modalUser = false;
+                            this.newUser = { username: '', password: '', nama: '', role: 'guru' };
+                            this.loadDataAdmin();
+                        } else {
+                            this.showToast(res.message, 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Gagal menambah user', 'error');
+                    }
+                    this.isLoading = false;
+                },
+
+                async hapusUser(username) {
+                    if(!confirm(`Yakin ingin menghapus akun ${username}?`)) return;
+                    this.isLoading = true;
+                    
+                    if (this.IS_PREVIEW) {
+                        this.usersData = this.usersData.filter(u => u.username !== username);
+                        this.isLoading = false;
+                        this.showToast('Akun dihapus (Preview)');
+                        return;
+                    }
+
+                    try {
+                        const res = await this.fetchGAS({ action: 'delete_user', username: username });
+                        if (res.status === 'success') {
+                            this.showToast('Akun dihapus');
+                            this.loadDataAdmin();
+                        }
+                    } catch(e) {
+                        this.showToast('Gagal menghapus', 'error');
+                    }
+                    this.isLoading = false;
+                },
+
+                viewRekap(jsonStr) {
+                    try {
+                        this.activeRekap = JSON.parse(jsonStr);
+                        this.modalRekap = true;
+                    } catch(e) {
+                        this.showToast('Data rekap tidak valid', 'error');
+                    }
+                },
+
+                // --- FUNGSI CETAK LAPORAN (PDF) ---
+                printReport(item, mode = 'form') {
+                    this.printMode = mode;
+                    // Ekstrak data rekap absen
+                    let parsed = {};
+                    try {
+                        parsed = typeof item.rekapAbsen === 'string' ? JSON.parse(item.rekapAbsen) : (item.rekapAbsen || {});
+                    } catch (e) {
+                        parsed = {};
+                    }
+                    
+                    // Siapkan tanggal cetak dengan format Bahasa Indonesia (misal: 12 Agustus 2026)
+                    const tglCetak = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+                    // Siapkan data cetak
+                    this.activePrintData = { ...item, parsedRekap: parsed, tanggalCetak: tglCetak };
+                    this.isPrinting = true;
+                    
+                    // Tunggu Alpine merender UI cetak, lalu buka print dialog
+                    setTimeout(() => {
+                        window.print();
+                        // Reset kembali UI setelah dialog ditutup
+                        setTimeout(() => {
+                            this.isPrinting = false;
+                        }, 800);
+                    }, 500); // Delay dinaikkan sedikit agar browser merender sempurna
+                },
+
+                // --- MANAJEMEN DATA SISWA & EXPORT EXCEL ---
+                async loadSiswaData() {
+                    // Berpindah tab
+                    if (this.user?.role === 'guru') this.guruTab = 'siswa';
+                    if (this.user?.role === 'admin') this.adminTab = 'siswa';
+                    
+                    this.isLoading = true;
+                    if (this.IS_PREVIEW) {
+                        setTimeout(() => {
+                            // Dummy Data Siswa Mode Preview
+                            this.listSiswa = [
+                                { nis: '1001', nama: 'Ahmad Budi', lp: 'L' },
+                                { nis: '1002', nama: 'Siti Aminah', lp: 'P' }
+                            ];
+                            this.isLoading = false;
+                            this.showToast('Data Siswa ' + this.selectedKelasSiswa + ' Dimuat (Preview)');
+                        }, 500);
+                        return;
+                    }
+
+                    try {
+                        const res = await this.fetchGAS({ action: 'get_siswa', kelas: this.selectedKelasSiswa });
+                        if (res.status === 'success' && res.data) {
+                            this.listSiswa = JSON.parse(res.data || '[]');
+                        } else {
+                            this.listSiswa = [];
+                        }
+                    } catch (e) {
+                        this.listSiswa = [];
+                    }
+                    this.isLoading = false;
+                },
+
+                tambahSiswa() {
+                    this.listSiswa.push({ nis: '', nama: '', lp: 'L' });
+                },
+
+                async simpanDataSiswa() {
+                    if(this.listSiswa.length === 0) {
+                        this.showToast('Tidak ada data untuk disimpan', 'error');
+                        return;
+                    }
+                    this.isLoading = true;
+                    if (this.IS_PREVIEW) {
+                        setTimeout(() => {
+                            this.showToast('Data Siswa Tersimpan (Preview)');
+                            this.isLoading = false;
+                        }, 500);
+                        return;
+                    }
+
+                    try {
+                        const payload = { 
+                            action: 'save_siswa', 
+                            kelas: this.selectedKelasSiswa, 
+                            dataSiswa: JSON.stringify(this.listSiswa) 
+                        };
+                        const res = await this.fetchGAS(payload);
+                        if (res.status === 'success') {
+                            this.showToast(res.message);
+                        } else {
+                            this.showToast('Gagal menyimpan data', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Terjadi kesalahan koneksi', 'error');
+                    }
+                    this.isLoading = false;
+                },
+
+                downloadExcelSiswa() {
+                    const tglCetak = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                    const namaPiket = this.user ? this.user.nama : '.........................';
+                    
+                    const monthIndex = this.listBulan.indexOf(this.selectedBulanSiswa);
+                    const year = this.tahunSiswa;
+                    
+                    // Daftar Libur Nasional
+                    const liburNasional = [
+                        `${year}-01-01`, `${year}-05-01`, `${year}-06-01`, `${year}-08-17`, `${year}-12-25`
+                    ];
+
+                    const isHolidayOrWeekend = (day) => {
+                        const dateObj = new Date(year, monthIndex, day);
+                        if (dateObj.getMonth() !== monthIndex) return false; 
+
+                        const dayOfWeek = dateObj.getDay();
+                        // 0 = Minggu, 6 = Sabtu
+                        if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+                        
+                        const yyyy = dateObj.getFullYear();
+                        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                        const dd = String(dateObj.getDate()).padStart(2, '0');
+                        return liburNasional.includes(`${yyyy}-${mm}-${dd}`);
+                    };
+                    
+                    // Template HTML yang disesuaikan dengan Native Excel XML
+                    let tableHtml = `
+                        <html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+                        <head>
+                        <meta charset="utf-8">
+                        <style>
+                            table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11px; }
+                            td, th { border: 1px solid #000000; vertical-align: middle; }
+                            .no-border { border: none !important; }
+                            .text-center { text-align: center; }
+                            .text-left { text-align: left; }
+                            .font-bold { font-weight: bold; }
+                            .bg-grey { background-color: #e2e8f0; }
+                            .bg-red-header { background-color: #f87171; color: #ffffff; }
+                            .bg-red-cell { background-color: #f87171; }
+                        </style>
+                        <!--[if gte mso 9]><xml>
+                         <x:ExcelWorkbook>
+                          <x:ExcelWorksheets>
+                           <x:ExcelWorksheet>
+                            <x:Name>Absensi ${this.selectedBulanSiswa}</x:Name>
+                            <x:WorksheetOptions>
+                             <x:Print>
+                              <x:ValidPrinterInfo/>
+                              <x:PaperSizeIndex>9</x:PaperSizeIndex>
+                              <x:Orientation>Landscape</x:Orientation>
+                             </x:Print>
+                             <x:FitToPage/>
+                            </x:WorksheetOptions>
+                           </x:ExcelWorksheet>
+                          </x:ExcelWorksheets>
+                         </x:ExcelWorkbook>
+                        </xml><![endif]-->
+                        </head>
+                        <body>
+                        <table>
+                            <colgroup>
+                                <col width="30"><col width="80"><col width="40"><col width="200">
+                    `;
+                    
+                    // Set lebar untuk 31 kolom tanggal
+                    for(let i=1; i<=31; i++) {
+                        tableHtml += `<col width="22">`;
+                    }
+                    // Set lebar untuk kolom S, I, A
+                    tableHtml += `<col width="25"><col width="25"><col width="25"></colgroup><tbody>`;
+                    
+                    // Baris 1: Logo & Judul Tengah
+                    tableHtml += `
+                        <tr>
+                            <td colspan="4" class="no-border text-center" style="height: 80px; vertical-align: middle;">
+                                <img src="https://iili.io/CU2uox4.png" alt="CU2uox4.png" width="75" height="75">
+                            </td>
+                            <td colspan="34" class="no-border text-center font-bold" style="font-size: 18px; vertical-align: middle;">
+                                LAPORAN ABSENSI BULAN ${this.selectedBulanSiswa.toUpperCase()} ${this.tahunSiswa}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="38" class="no-border text-left font-bold" style="font-size: 14px; padding-bottom: 10px;">
+                                KELAS: ${this.selectedKelasSiswa}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th rowspan="2" class="bg-grey font-bold text-center">No</th>
+                            <th rowspan="2" class="bg-grey font-bold text-center">NIS</th>
+                            <th rowspan="2" class="bg-grey font-bold text-center">L/P</th>
+                            <th rowspan="2" class="bg-grey font-bold text-center">Nama Siswa</th>
+                            <th colspan="31" class="bg-grey font-bold text-center">Tanggal</th>
+                            <th colspan="3" class="bg-grey font-bold text-center">Keterangan</th>
+                        </tr>
+                        <tr>
+                    `;
+                    
+                    // Kolom Header 1-31 (Deteksi Warna Merah)
+                    for(let i=1; i<=31; i++) {
+                        let headerClass = isHolidayOrWeekend(i) ? 'bg-red-header font-bold text-center' : 'bg-grey font-bold text-center';
+                        tableHtml += `<th class="${headerClass}">${i}</th>`;
+                    }
+                    
+                    tableHtml += `
+                            <th class="bg-grey font-bold text-center">S</th>
+                            <th class="bg-grey font-bold text-center">I</th>
+                            <th class="bg-grey font-bold text-center">A</th>
+                        </tr>
+                    `;
+                    
+                    // Baris Data Siswa
+                    if (this.listSiswa.length === 0) {
+                        tableHtml += `<tr><td colspan="38" class="text-center" style="height: 40px;">Belum ada data siswa.</td></tr>`;
+                    } else {
+                        this.listSiswa.forEach((siswa, index) => {
+                            let r = index + 6; // Baris Excel dimulai dari index ke-6 (karena ada header gabungan)
+                            tableHtml += `
+                                <tr>
+                                    <td class="text-center">${index + 1}</td>
+                                    <td class="text-left" style="mso-number-format:'\\@';">${siswa.nis}</td>
+                                    <td class="text-center">${siswa.lp}</td>
+                                    <td class="text-left">${siswa.nama}</td>
+                            `;
+                            
+                            // Cell Tanggal 1-31 (Warna Merah jika libur)
+                            for(let i=1; i<=31; i++) {
+                                let cellClass = isHolidayOrWeekend(i) ? 'bg-red-cell' : ''; 
+                                tableHtml += `<td class="${cellClass}"></td>`;
+                            }
+                            
+                            // Injeksi Rumus Otomatis Excel (COUNTIF)
+                            tableHtml += `
+                                <td class="text-center" x:fmla="=COUNTIF(E${r}:AI${r},&quot;S&quot;)"></td>
+                                <td class="text-center" x:fmla="=COUNTIF(E${r}:AI${r},&quot;I&quot;)"></td>
+                                <td class="text-center" x:fmla="=COUNTIF(E${r}:AI${r},&quot;A&quot;)"></td>
+                            </tr>`;
+                        });
+                    }
+
+                    // TANDA TANGAN TANPA KOTAK BORDER (Sangat Ketat dengan Inline Style)
+                    tableHtml += `
+                            <tr><td colspan="38" style="border: none !important; border: 0px;"></td></tr>
+                            <tr><td colspan="38" style="border: none !important; border: 0px;"></td></tr>
+                            <tr>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left;">Mengetahui,</td>
+                                <td colspan="22" style="border: none !important; border: 0px;"></td>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left;">Jakarta, ${tglCetak}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left; font-weight: bold;">Kepala SDN Kedoya Selatan 04 Pagi</td>
+                                <td colspan="22" style="border: none !important; border: 0px;"></td>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left;">Guru Piket</td>
+                            </tr>
+                            <tr><td colspan="38" style="border: none !important; border: 0px; height: 60px;"></td></tr>
+                            <tr>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left; font-weight: bold;"><u style="text-underline-position: under;">Andi Rifaih, S.Pd</u></td>
+                                <td colspan="22" style="border: none !important; border: 0px;"></td>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left; font-weight: bold;"><u style="text-underline-position: under;">${namaPiket}</u></td>
+                            </tr>
+                            <tr>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left;">NIP. 197410072014121001</td>
+                                <td colspan="22" style="border: none !important; border: 0px;"></td>
+                                <td colspan="8" style="border: none !important; border: 0px; text-align: left;">NIP. ........................................</td>
+                            </tr>
+                        </tbody></table>
+                        </body></html>
+                    `;
+
+                    // Generate File
+                    const blob = new Blob([tableHtml], { type: 'application/vnd.ms-excel' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Laporan_Absensi_Kelas_${this.selectedKelasSiswa}_${this.selectedBulanSiswa}.xls`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    this.showToast('Format Excel berhasil diunduh!');
+                },
+
+                // --- CORE FETCH KE GAS ---
+                async fetchGAS(payload) {
+                    // Bypass CORS di Blogger: Gunakan method POST dengan Content-Type default text/plain
+                    const response = await fetch(GAS_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    return result;
+                }
+            }));
+        });
+    </script>
+</body>
+</html>
